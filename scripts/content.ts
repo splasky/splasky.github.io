@@ -29,12 +29,23 @@ export const disqusShortname = config.disqusShortname || '';
 export const legacyOrigins = config.legacyOrigins || [];
 export const blogPath = `/${username}/blog/`;
 export const thoughtsPath = `/${username}/thoughts/`;
+export const aboutPath = `/${username}/about/`;
 export const thoughtAnchor = (id: string) => `thought-${id}`;
 export const thoughtPath = (id: string) => `${thoughtsPath}#${encodeURIComponent(thoughtAnchor(id))}`;
 export const postPath = (id: string) => `${blogPath}${encodeURIComponent(id)}/`;
 export const isVercel = (host: string) => /(^|\.)(vercel\.app|vercel\.com|vercel-scripts\.com|vercel-insights\.com|vercel-analytics\.com)$/.test(host);
 export type Post = { id: string; title: string; date: string; markdown: string; html: string; description: string; image?: string };
 export type Thought = Post & { attachment?: string };
+
+export async function readAbout(source: string): Promise<Post | null> {
+  try {
+    const markdown = await readFile(path.join(source, 'content/about.md'), 'utf8');
+    return { id: 'about', title: `About ${siteName}`, date: new Date(0).toISOString(), markdown, html: '', description: '' };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
 
 export async function readThoughts(source: string): Promise<Thought[]> {
   let raw: string;
@@ -95,6 +106,7 @@ export function rewriteLink(href: string, id: string, ids: Set<string>): string 
   const decoded = decodeURIComponent(url.pathname);
   const prefix = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (new RegExp(`^/${prefix}/thoughts/?$`).test(decoded)) return thoughtsPath + url.search + url.hash;
+  if (new RegExp(`^/${prefix}/about/?$`).test(decoded)) return aboutPath + url.search + url.hash;
   if (new RegExp(`^/${prefix}/blog/?$`).test(decoded) || (url.origin === site && decoded === '/')) return '/' + url.search + url.hash;
   const match = decoded.match(new RegExp(`^/${prefix}/blog/([^/]+)/?$`));
   const markdownID = !href.startsWith('http') && href.split(/[?#]/)[0].endsWith('.md')

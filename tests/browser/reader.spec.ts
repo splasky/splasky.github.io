@@ -13,6 +13,10 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
       contentType: 'application/javascript',
       body: 'window.DISQUS={reset:function(){}};'
     }));
+    await page.goto('/');
+    await page.getByRole('navigation').getByRole('link', { name: 'About', exact: true }).click();
+    await expect(page).toHaveURL('http://127.0.0.1:4173/splasky/about/');
+    await expect(page.locator('.about h1')).toContainText('About');
     expect((await page.goto('/'))?.status()).toBe(200);
     await expect(page.locator('h1')).toHaveText('Blog.');
     await page.screenshot({ path: testInfo.outputPath('archive.png'), fullPage: true });

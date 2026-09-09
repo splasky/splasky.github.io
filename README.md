@@ -18,7 +18,7 @@ This project turns a TinyMind content repository into a static, domain-stable pu
    }
    ```
 
-   `siteOrigin` is the final public origin, without a path or trailing slash. `username` controls the `/USERNAME/blog/` and `/USERNAME/thoughts/` paths and must match the TinyMind public username. `contentRepository` is the repository created by TinyMind and must contain `content/blog/*.md` and optionally `content/thoughts.json`. Set `disqusShortname` to an empty string to disable comments. Add any old TinyMind/Vercel origins whose internal links should be rewritten to the local reader.
+   `siteOrigin` is the final public origin, without a path or trailing slash. `username` controls the `/USERNAME/blog/`, `/USERNAME/thoughts/` and `/USERNAME/about/` paths and must match the TinyMind public username. `contentRepository` is the repository created by TinyMind and must contain `content/blog/*.md`, `content/about.md`, and optionally `content/thoughts.json`. Set `disqusShortname` to an empty string to disable comments. Add any old TinyMind/Vercel origins whose internal links should be rewritten to the local reader.
 
 2. In the content repository, install [`automation/notify-blog.yml`](automation/notify-blog.yml) as `.github/workflows/notify-blog.yml`. Change its `SITE_REPOSITORY` value to `YOUR-ACCOUNT/YOUR-FORK-NAME`.
 
@@ -49,7 +49,7 @@ npm run test:browser
 npm run preview
 ```
 
-The build output is `dist/`; it includes the homepage, `/USERNAME/blog/`, article pages, `/USERNAME/thoughts/`, one combined RSS feed at `/feed.xml` (and `/USERNAME/feed.xml`), sitemap, robots.txt, a custom 404 and `build-info.json`. The feed contains both Blog and Thought items, each labeled with a `Blog` or `Thought` category. Set `CONTENT_DIR` to another checkout when testing a different source. The browser tests visit and reload every generated page at desktop and mobile widths, mock Disqus, block Vercel, verify images and links, and save screenshots under `test-results/`.
+The build output is `dist/`; it includes the homepage, `/USERNAME/blog/`, article pages, `/USERNAME/thoughts/`, `/USERNAME/about/`, one combined RSS feed at `/feed.xml` (and `/USERNAME/feed.xml`), sitemap, robots.txt, a custom 404 and `build-info.json`. The feed contains both Blog and Thought items, each labeled with a `Blog` or `Thought` category. Set `CONTENT_DIR` to another checkout when testing a different source. The browser tests visit and reload every generated page at desktop and mobile widths, mock Disqus, block Vercel, verify images and links, and save screenshots under `test-results/`.
 
 ## Disqus
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, readFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { assetResolver, postPath, readPosts, readThoughts, renderPost, rewriteLink, safeFile, thoughtPath, type Post } from '../scripts/content.ts';
+import { aboutPath, assetResolver, postPath, readAbout, readPosts, readThoughts, renderPost, rewriteLink, safeFile, thoughtPath, type Post } from '../scripts/content.ts';
 import { validateSite } from '../scripts/validate.ts';
 import { buildFeed } from '../scripts/feed.ts';
 
@@ -38,9 +38,21 @@ test('rewrites only navigation, with Unicode, query and fragments', () => {
   assert.equal(rewriteLink('./中文.md#section', 'a', ids), `${postPath('中文')}#section`);
   assert.equal(rewriteLink('https://tinymind.me/splasky/blog', 'a', ids), '/');
   assert.equal(rewriteLink('https://tinymind-alpha.vercel.app/splasky/thoughts#thought-123', 'a', ids), '/splasky/thoughts/#thought-123');
+  assert.equal(rewriteLink('https://tinymind-alpha.vercel.app/splasky/about', 'a', ids), aboutPath);
   assert.equal(rewriteLink('https://example.com/', 'a', ids), 'https://example.com/');
   assert.throws(() => rewriteLink('/splasky/blog/missing', 'a', ids), /Broken article/);
   assert.throws(() => rewriteLink('https://tinymind-alpha.vercel.app/login', 'a', ids), /Unmapped/);
+});
+
+test('about: missing and markdown source are handled', async () => {
+  const f = await fixture();
+  try {
+    assert.equal(await readAbout(f.source), null);
+    await writeFile(path.join(f.source, 'content/about.md'), '# About\n\nHello');
+    const about = await readAbout(f.source);
+    assert.equal(about?.title, 'About splasky');
+    assert.equal(about?.markdown, '# About\n\nHello');
+  } finally { await f.cleanup(); }
 });
 
 test('thoughts: missing/empty source, newest first, edits, deletion and malformed entries', async () => {
