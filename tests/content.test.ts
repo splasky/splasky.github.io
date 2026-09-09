@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, readFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { assetResolver, postPath, readPosts, renderPost, rewriteLink, safeFile, type Post } from '../scripts/content.ts';
+import { assetResolver, postPath, readPosts, readThoughts, renderPost, rewriteLink, safeFile, thoughtPath, type Post } from '../scripts/content.ts';
 import { validateSite } from '../scripts/validate.ts';
 
 async function fixture() {
@@ -36,9 +36,37 @@ test('rewrites only navigation, with Unicode, query and fragments', () => {
   assert.equal(rewriteLink('https://tinymind-alpha.vercel.app/splasky/blog/中文?q=1#section', 'a', ids), `${postPath('中文')}?q=1#section`);
   assert.equal(rewriteLink('./中文.md#section', 'a', ids), `${postPath('中文')}#section`);
   assert.equal(rewriteLink('https://tinymind.me/splasky/blog', 'a', ids), '/');
+  assert.equal(rewriteLink('https://tinymind-alpha.vercel.app/splasky/thoughts#thought-123', 'a', ids), '/splasky/thoughts/#thought-123');
   assert.equal(rewriteLink('https://example.com/', 'a', ids), 'https://example.com/');
   assert.throws(() => rewriteLink('/splasky/blog/missing', 'a', ids), /Broken article/);
   assert.throws(() => rewriteLink('https://tinymind-alpha.vercel.app/login', 'a', ids), /Unmapped/);
+});
+
+test('thoughts: missing/empty source, newest first, edits, deletion and malformed entries', async () => {
+  const f = await fixture();
+  try {
+    const file = path.join(f.source, 'content/thoughts.json');
+    assert.deepEqual(await readThoughts(f.source), []);
+    const older = { id: '1', content: '舊短文', timestamp: '2026-01-01T00:00:00Z' };
+    const newer = { id: '2', content: 'New **thought**', timestamp: '2026-02-01T00:00:00Z', image: '/assets/image.png' };
+    await writeFile(file, JSON.stringify([older, newer]));
+    const entries = await readThoughts(f.source);
+    assert.deepEqual(entries.map(entry => entry.id), ['2', '1']);
+    assert.equal(entries[0].attachment, '/assets/image.png');
+    assert.equal(thoughtPath('2'), '/splasky/thoughts/#thought-2');
+    await writeFile(file, JSON.stringify([{ ...newer, content: 'Edited' }]));
+    assert.deepEqual((await readThoughts(f.source)).map(entry => entry.markdown), ['Edited']);
+    await writeFile(file, JSON.stringify([older, older]));
+    await assert.rejects(readThoughts(f.source), /Duplicate/);
+    await writeFile(file, JSON.stringify([{ ...older, timestamp: 'bad' }]));
+    await assert.rejects(readThoughts(f.source), /Invalid thought/);
+    await writeFile(file, '{}');
+    await assert.rejects(readThoughts(f.source), /array/);
+    await writeFile(file, 'broken json');
+    await assert.rejects(readThoughts(f.source), SyntaxError);
+    await writeFile(file, '[]');
+    assert.deepEqual(await readThoughts(f.source), []);
+  } finally { await f.cleanup(); }
 });
 
 test('mirrors repo images and renders math, code, tables and reference images without scripts', async () => {

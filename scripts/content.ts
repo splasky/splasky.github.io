@@ -18,9 +18,39 @@ import type { Root } from 'mdast';
 export const site = 'https://splasky.github.io';
 export const repo = 'splasky/tinymind-blog';
 export const blogPath = '/splasky/blog/';
+export const thoughtsPath = '/splasky/thoughts/';
+export const thoughtAnchor = (id: string) => `thought-${id}`;
+export const thoughtPath = (id: string) => `${thoughtsPath}#${encodeURIComponent(thoughtAnchor(id))}`;
 export const postPath = (id: string) => `${blogPath}${encodeURIComponent(id)}/`;
 export const isVercel = (host: string) => /(^|\.)(vercel\.app|vercel\.com|vercel-scripts\.com|vercel-insights\.com|vercel-analytics\.com)$/.test(host);
 export type Post = { id: string; title: string; date: string; markdown: string; html: string; description: string; image?: string };
+export type Thought = Post & { attachment?: string };
+
+export async function readThoughts(source: string): Promise<Thought[]> {
+  let raw: string;
+  try {
+    raw = await readFile(path.join(source, 'content/thoughts.json'), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const entries: unknown = JSON.parse(raw);
+  if (!Array.isArray(entries)) throw new Error('thoughts.json must contain an array');
+  const ids = new Set<string>();
+  return entries.map((entry): Thought => {
+    if (!entry || typeof entry.id !== 'string' || !entry.id.trim() || /[\x00-\x20]/.test(entry.id)
+      || typeof entry.content !== 'string' || typeof entry.timestamp !== 'string'
+      || Number.isNaN(Date.parse(entry.timestamp)) || (entry.image !== undefined && typeof entry.image !== 'string')) {
+      throw new Error('Invalid thought: expected id, content, timestamp and optional image');
+    }
+    if (ids.has(entry.id)) throw new Error(`Duplicate thought ID: ${entry.id}`);
+    ids.add(entry.id);
+    return {
+      id: entry.id, title: 'Thought', date: new Date(entry.timestamp).toISOString(),
+      markdown: entry.content, html: '', description: '', attachment: entry.image || undefined,
+    };
+  }).sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+}
 
 export async function readPosts(source: string): Promise<Post[]> {
   const files = await readdir(path.join(source, 'content/blog'), { withFileTypes: true });
@@ -53,6 +83,7 @@ export function rewriteLink(href: string, id: string, ids: Set<string>): string 
   const knownBlog = url.origin === site || isVercel(url.hostname) || ['tinymind.me', 'www.tinymind.me'].includes(url.hostname);
   if (!knownBlog) return href;
   const decoded = decodeURIComponent(url.pathname);
+  if (/^\/splasky\/thoughts\/?$/.test(decoded)) return thoughtsPath + url.search + url.hash;
   if (/^\/splasky\/blog\/?$/.test(decoded) || (url.origin === site && decoded === '/')) return '/' + url.search + url.hash;
   const match = decoded.match(/^\/splasky\/blog\/([^/]+)\/?$/);
   const markdownID = !href.startsWith('http') && href.split(/[?#]/)[0].endsWith('.md')

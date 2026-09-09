@@ -3,24 +3,29 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { assetResolver, blogPath, postPath, readPosts, renderPost, site, repo, type Post } from './content.ts';
+import { assetResolver, blogPath, postPath, readPosts, readThoughts, renderPost, site, repo, thoughtAnchor, thoughtPath, thoughtsPath, type Post } from './content.ts';
 import { validateSite } from './validate.ts';
 
 const source = path.resolve(process.env.CONTENT_DIR ?? '.content');
 const output = path.resolve('dist');
 const posts = await readPosts(source);
+const thoughts = await readThoughts(source);
 await rm(output, { recursive: true, force: true });
 await mkdir(path.join(output, 'assets'), { recursive: true });
 const asset = assetResolver(source, output);
 const ids = new Set(posts.map(p => p.id));
 for (const post of posts) await renderPost(post, ids, asset);
+for (const thought of thoughts) {
+  await renderPost(thought, ids, asset);
+  if (thought.attachment) thought.attachment = await asset(thought.attachment, thought.id);
+}
 await cp('styles/site.css', path.join(output, 'assets/site.css'));
 await cp('node_modules/katex/dist/katex.min.css', path.join(output, 'assets/katex.min.css'));
 await cp('node_modules/katex/dist/fonts', path.join(output, 'assets/fonts'), { recursive: true });
 await cp('node_modules/highlight.js/styles/github-dark.min.css', path.join(output, 'assets/highlight.css'));
 
-function Layout({ title, description, canonical, post, children, noindex = false }: {
-  title: string; description: string; canonical: string; post?: Post; children: React.ReactNode; noindex?: boolean;
+function Layout({ title, description, canonical, post, children, noindex = false, section = 'blog' }: {
+  title: string; description: string; canonical: string; post?: Post; children: React.ReactNode; noindex?: boolean; section?: 'blog' | 'thoughts';
 }) {
   return <html lang="zh-Hant"><head>
     <meta charSet="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -39,7 +44,7 @@ function Layout({ title, description, canonical, post, children, noindex = false
   </head><body>
     <a className="skip-link" href="#main">跳至內容</a>
     <header className="site-header"><a className="brand" href="/">splasky<span className="brand-dot">.</span></a>
-      <nav aria-label="主選單"><a href="/" aria-current={!post && !noindex ? 'page' : undefined}>Blog</a><a href="/feed.xml">RSS</a><a href="https://github.com/splasky">GitHub ↗</a></nav>
+      <nav aria-label="主選單"><a href="/" aria-current={section === 'blog' && !post && !noindex ? 'page' : undefined}>Blog</a><a href={thoughtsPath} aria-current={section === 'thoughts' ? 'page' : undefined}>Thoughts</a><a href="/feed.xml">RSS</a><a href="https://github.com/splasky">GitHub ↗</a></nav>
     </header>
     <main id="main">{children}</main>
     <footer className="site-footer"><span>© {new Date().getUTCFullYear()} splasky</span><a href="/feed.xml">Subscribe via RSS ↗</a></footer>
@@ -62,6 +67,17 @@ const listing = <Layout title="splasky — Blog" description={description} canon
 </Layout>;
 await page('/', listing);
 await page(blogPath, listing);
+const thoughtDate = new Intl.DateTimeFormat('zh-TW', {
+  timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+await page(thoughtsPath, <Layout title="splasky — Thoughts" description="日常隨想、開發片段與短筆記。" canonical={`${site}${thoughtsPath}`} section="thoughts">
+  <section className="intro"><p className="eyebrow">SMALL NOTES, EVERYDAY MOMENTS</p><h1>Thoughts<span className="brand-dot">.</span></h1><p>日常隨想、開發片段與短筆記。</p></section>
+  <div className="thoughts">{thoughts.length ? thoughts.map(thought => <article className="thought" key={thought.id} id={thoughtAnchor(thought.id)}>
+    <div className="prose" dangerouslySetInnerHTML={{ __html: thought.html }} />
+    {thought.attachment && <img className="thought-image" src={thought.attachment} alt="Thought 附圖" />}
+    <footer><a className="thought-permalink" href={thoughtPath(thought.id)} aria-label={`分享 ${thoughtDate.format(new Date(thought.date))} 的短文`}><time dateTime={thought.date}>{thoughtDate.format(new Date(thought.date))}</time><span aria-hidden="true"> ↗</span></a></footer>
+  </article>) : <p className="empty">尚無短文，敬請期待。</p>}</div>
+</Layout>);
 for (const post of posts) await page(postPath(post.id), <Layout title={`${post.title} — splasky`} description={post.description} canonical={`${site}${postPath(post.id)}`} post={post}>
   <article className="post"><a className="back" href="/">← 所有文章</a><header className="post-header"><time dateTime={post.date}>{post.date.slice(0, 10)}</time><h1>{post.title}</h1></header>
     <div className="prose" dangerouslySetInnerHTML={{ __html: post.html }} />
@@ -75,10 +91,10 @@ const feed = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>
 await writeFile(path.join(output, 'feed.xml'), feed);
 await mkdir(path.join(output, 'splasky'), { recursive: true });
 await writeFile(path.join(output, 'splasky/feed.xml'), feed);
-await writeFile(path.join(output, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${site}/</loc></url>${posts.map(p => `<url><loc>${site}${postPath(p.id)}</loc></url>`).join('')}</urlset>`);
+await writeFile(path.join(output, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${site}/</loc></url><url><loc>${site}${thoughtsPath}</loc></url>${posts.map(p => `<url><loc>${site}${postPath(p.id)}</loc></url>`).join('')}</urlset>`);
 await writeFile(path.join(output, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`);
 await writeFile(path.join(output, '.nojekyll'), '');
 const commit = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-await writeFile(path.join(output, 'build-info.json'), JSON.stringify({ repository: repo, commit, builtAt: new Date().toISOString(), articles: posts.length }, null, 2));
+await writeFile(path.join(output, 'build-info.json'), JSON.stringify({ repository: repo, commit, builtAt: new Date().toISOString(), articles: posts.length, thoughts: thoughts.length }, null, 2));
 await validateSite(output);
-console.log(`Validated and built ${posts.length} articles from ${repo}@${commit.slice(0, 12)} into dist/`);
+console.log(`Validated and built ${posts.length} articles and ${thoughts.length} thoughts from ${repo}@${commit.slice(0, 12)} into dist/`);

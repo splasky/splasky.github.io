@@ -44,6 +44,8 @@ Workflows run without runtime credentials in the public output. Renew the dispat
 
 ## Scope and recovery
 
-The reader includes articles only, without TinyMind login, editing, Thoughts, About or comments. TinyMind can move domains without changing this site's content source or reader URLs. This does not disable the original Vercel deployment or erase historical public URLs.
+The reader includes articles and Thoughts, without TinyMind login, editing, About or comments. Thoughts are read from `content/thoughts.json` (`id`, `content`, `timestamp`, optional `image`), sorted newest first, and published in full at `/splasky/thoughts/` with stable `#thought-<id>` links. Dates display in Asia/Taipei. Missing or empty Thoughts data produces an empty state; malformed JSON, invalid entries or duplicate IDs stop publication. Markdown and images use the same rendering and mirroring as articles. The content workflow watches Thoughts edits as well as articles and assets. RSS remains the article feed.
+
+TinyMind can move domains without changing this site's content source or reader URLs. This does not disable the original Vercel deployment or erase historical public URLs.
 
 If a publication fails, inspect the failed Actions step and fix the source, then rerun publication. Restore deleted content or revert the faulty site commit to publish a previous version. The original redirect is retained in Git history (`e878977`) if a complete rollback is needed.
