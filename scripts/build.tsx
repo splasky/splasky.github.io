@@ -48,7 +48,7 @@ function Layout({ title, description, canonical, post, children, noindex = false
   </head><body>
     <a className="skip-link" href="#main">跳至內容</a>
     <header className="site-header"><a className="brand" href="/">{siteName}<span className="brand-dot">.</span></a>
-      <nav aria-label="主選單"><a href="/" aria-current={section === 'blog' && !post && !noindex ? 'page' : undefined}>Blog</a><a href={thoughtsPath} aria-current={section === 'thoughts' ? 'page' : undefined}>Thoughts</a><a href={aboutPath} aria-current={section === 'about' ? 'page' : undefined}>About</a><a href="/feed.xml">RSS</a><a href={`https://github.com/${username}`}>GitHub ↗</a></nav>
+      <nav aria-label="主選單"><a href="/" aria-current={section === 'blog' && !post && !noindex ? 'page' : undefined}>Blog</a><a href={thoughtsPath} aria-current={section === 'thoughts' ? 'page' : undefined}>Thoughts</a><a href={aboutPath} aria-current={section === 'about' ? 'page' : undefined}>About</a><a href="/feed.xml">RSS</a><a href={`https://github.com/${username}`}>GitHub <span className="external-arrow" aria-hidden="true">↗</span></a></nav>
     </header>
     <main id="main">{children}</main>
     <footer className="site-footer"><span>© {new Date().getUTCFullYear()} {siteName}</span><a href="/feed.xml">Subscribe via RSS ↗</a></footer>
