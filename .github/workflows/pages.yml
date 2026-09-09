@@ -1,0 +1,52 @@
+name: Publish blog
+
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [blog-content-updated]
+  workflow_dispatch:
+
+# Fetch the latest content only after earlier deployments finish.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out current article source
+        uses: actions/checkout@v4
+        with:
+          repository: splasky/tinymind-blog
+          path: .content
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps --only-shell chromium
+      - run: npm run test:browser
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Deploy verified site
+        id: deployment
+        uses: actions/deploy-pages@v4

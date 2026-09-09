@@ -1,0 +1,34 @@
+# Install at .github/workflows/notify-blog.yml in splasky/tinymind-blog.
+name: Update public blog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'content/blog/**'
+      - 'assets/**'
+      - '.github/workflows/notify-blog.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: notify-public-blog
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request public site rebuild
+        env:
+          GH_TOKEN: ${{ secrets.BLOG_PUBLISH_TOKEN }}
+          CONTENT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo '::error::Set BLOG_PUBLISH_TOKEN with Contents: write on splasky/splasky.github.io only.'
+            exit 1
+          fi
+          jq -n --arg sha "$CONTENT_SHA" \
+            '{event_type:"blog-content-updated",client_payload:{source_sha:$sha}}' \
+            | gh api --method POST repos/splasky/splasky.github.io/dispatches --input -

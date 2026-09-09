@@ -1,0 +1,84 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { assetResolver, blogPath, postPath, readPosts, renderPost, site, repo, type Post } from './content.ts';
+import { validateSite } from './validate.ts';
+
+const source = path.resolve(process.env.CONTENT_DIR ?? '.content');
+const output = path.resolve('dist');
+const posts = await readPosts(source);
+await rm(output, { recursive: true, force: true });
+await mkdir(path.join(output, 'assets'), { recursive: true });
+const asset = assetResolver(source, output);
+const ids = new Set(posts.map(p => p.id));
+for (const post of posts) await renderPost(post, ids, asset);
+await cp('styles/site.css', path.join(output, 'assets/site.css'));
+await cp('node_modules/katex/dist/katex.min.css', path.join(output, 'assets/katex.min.css'));
+await cp('node_modules/katex/dist/fonts', path.join(output, 'assets/fonts'), { recursive: true });
+await cp('node_modules/highlight.js/styles/github-dark.min.css', path.join(output, 'assets/highlight.css'));
+
+function Layout({ title, description, canonical, post, children, noindex = false }: {
+  title: string; description: string; canonical: string; post?: Post; children: React.ReactNode; noindex?: boolean;
+}) {
+  return <html lang="zh-Hant"><head>
+    <meta charSet="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title><meta name="description" content={description} /><link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <meta property="og:title" content={title} /><meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} /><meta property="og:site_name" content="splasky" />
+    <meta property="og:type" content={post ? 'article' : 'website'} />
+    <meta name="twitter:card" content={post?.image ? 'summary_large_image' : 'summary'} />
+    <meta name="twitter:title" content={title} /><meta name="twitter:description" content={description} />
+    {post?.image && <><meta property="og:image" content={new URL(post.image, site).href} /><meta name="twitter:image" content={new URL(post.image, site).href} /></>}
+    {post && <meta property="article:published_time" content={post.date} />}
+    <link rel="alternate" type="application/rss+xml" title="splasky — Blog" href="/feed.xml" />
+    <link rel="stylesheet" href="/assets/site.css" /><link rel="stylesheet" href="/assets/highlight.css" />
+    <link rel="stylesheet" href="/assets/katex.min.css" />
+  </head><body>
+    <a className="skip-link" href="#main">跳至內容</a>
+    <header className="site-header"><a className="brand" href="/">splasky<span className="brand-dot">.</span></a>
+      <nav aria-label="主選單"><a href="/" aria-current={!post && !noindex ? 'page' : undefined}>Blog</a><a href="/feed.xml">RSS</a><a href="https://github.com/splasky">GitHub ↗</a></nav>
+    </header>
+    <main id="main">{children}</main>
+    <footer className="site-footer"><span>© {new Date().getUTCFullYear()} splasky</span><a href="/feed.xml">Subscribe via RSS ↗</a></footer>
+  </body></html>;
+}
+async function page(route: string, element: React.ReactElement) {
+  const target = path.join(output, decodeURIComponent(route), 'index.html');
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, '<!DOCTYPE html>\n' + renderToStaticMarkup(element));
+}
+const description = 'Notes on software, hardware, and things learned along the way. 開發紀錄、技術筆記與生活隨想。';
+const years = [...new Set(posts.map(p => p.date.slice(0, 4)))];
+const listing = <Layout title="splasky — Blog" description={description} canonical={`${site}/`}>
+  <section className="intro"><p className="eyebrow">NOTES & EXPLORATIONS</p><h1>Blog<span className="brand-dot">.</span></h1><p>開發紀錄、技術筆記與生活隨想。</p></section>
+  <div className="archive">{posts.length ? years.map(year => <section className="year-group" key={year} aria-label={`${year} 年文章`}>
+    <h2>{year}</h2><ul>{posts.filter(p => p.date.startsWith(year)).map(post => <li key={post.id}>
+      <a href={postPath(post.id)}>{post.title}</a><span className="leader" aria-hidden="true" /><time dateTime={post.date}>{post.date.slice(5, 10)}</time>
+    </li>)}</ul>
+  </section>) : <p className="empty">尚無文章，敬請期待。</p>}</div>
+</Layout>;
+await page('/', listing);
+await page(blogPath, listing);
+for (const post of posts) await page(postPath(post.id), <Layout title={`${post.title} — splasky`} description={post.description} canonical={`${site}${postPath(post.id)}`} post={post}>
+  <article className="post"><a className="back" href="/">← 所有文章</a><header className="post-header"><time dateTime={post.date}>{post.date.slice(0, 10)}</time><h1>{post.title}</h1></header>
+    <div className="prose" dangerouslySetInnerHTML={{ __html: post.html }} />
+  </article>
+</Layout>);
+await writeFile(path.join(output, '404.html'), '<!DOCTYPE html>\n' + renderToStaticMarkup(<Layout title="找不到文章 — splasky" description="此頁面不存在。" canonical={`${site}/404.html`} noindex>
+  <section className="intro"><p className="eyebrow">404</p><h1>找不到這個頁面。</h1><p>文章可能已移動或刪除。</p><a className="back" href="/">← 回到文章列表</a></section>
+</Layout>));
+const xml = (text: string) => text.replace(/[<>&"']/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[ch]!);
+const feed = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>splasky — Blog</title><link>${site}/</link><description>${xml(description)}</description>${posts.map(p => `<item><title>${xml(p.title)}</title><link>${site}${postPath(p.id)}</link><guid>${site}${postPath(p.id)}</guid><pubDate>${new Date(p.date).toUTCString()}</pubDate><description>${xml(p.description)}</description></item>`).join('')}</channel></rss>`;
+await writeFile(path.join(output, 'feed.xml'), feed);
+await mkdir(path.join(output, 'splasky'), { recursive: true });
+await writeFile(path.join(output, 'splasky/feed.xml'), feed);
+await writeFile(path.join(output, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${site}/</loc></url>${posts.map(p => `<url><loc>${site}${postPath(p.id)}</loc></url>`).join('')}</urlset>`);
+await writeFile(path.join(output, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`);
+await writeFile(path.join(output, '.nojekyll'), '');
+const commit = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+await writeFile(path.join(output, 'build-info.json'), JSON.stringify({ repository: repo, commit, builtAt: new Date().toISOString(), articles: posts.length }, null, 2));
+await validateSite(output);
+console.log(`Validated and built ${posts.length} articles from ${repo}@${commit.slice(0, 12)} into dist/`);
