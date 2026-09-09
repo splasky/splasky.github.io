@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { assetResolver, postPath, readPosts, readThoughts, renderPost, rewriteLink, safeFile, thoughtPath, type Post } from '../scripts/content.ts';
 import { validateSite } from '../scripts/validate.ts';
+import { buildFeed } from '../scripts/feed.ts';
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'splasky-test-'));
@@ -126,4 +127,20 @@ test('output validation rejects Vercel resources and broken links but permits li
     await writeFile(file, '<script src="/assets/disqus.js"></script>');
     await validateSite(f.output);
   } finally { await f.cleanup(); }
+});
+
+test('RSS combines Blog and Thoughts, categorizes entries, and updates its latest date', () => {
+  const post = { id: 'article', title: 'A & B', date: '2026-01-01T00:00:00.000Z', markdown: '', html: '', description: 'Article <summary>' } as Post;
+  const thought = { id: '123', title: 'Thought', date: '2026-02-01T00:00:00.000Z', markdown: '', html: '', description: 'Short & sweet' } as Post & { attachment?: string };
+  const feed = buildFeed([post], [thought]);
+  assert.equal((feed.match(/<item>/g) ?? []).length, 2);
+  assert.match(feed, /<category>Blog<\/category>/);
+  assert.match(feed, /<category>Thought<\/category>/);
+  assert.match(feed, /A &amp; B/);
+  assert.match(feed, /Short &amp; sweet/);
+  assert.match(feed, /\/splasky\/thoughts\/#thought-123/);
+  assert.match(feed, /<lastBuildDate>Sun, 01 Feb 2026/);
+  const updated = buildFeed([post], [{ ...thought, date: '2026-03-01T00:00:00.000Z' }]);
+  assert.notEqual(updated, feed);
+  assert.match(updated, /<lastBuildDate>Sun, 01 Mar 2026/);
 });

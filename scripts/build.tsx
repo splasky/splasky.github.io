@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { assetResolver, blogPath, postPath, readPosts, readThoughts, renderPost, site, siteName, username, repo, contentBranch, disqusShortname, thoughtAnchor, thoughtPath, thoughtsPath, type Post } from './content.ts';
 import { validateSite } from './validate.ts';
+import { buildFeed } from './feed.ts';
 
 const source = path.resolve(process.env.CONTENT_DIR ?? '.content');
 const output = path.resolve('dist');
@@ -95,8 +96,7 @@ for (const post of posts) await page(postPath(post.id), <Layout title={`${post.t
 await writeFile(path.join(output, '404.html'), '<!DOCTYPE html>\n' + renderToStaticMarkup(<Layout title="找不到文章 — splasky" description="此頁面不存在。" canonical={`${site}/404.html`} noindex>
   <section className="intro"><p className="eyebrow">404</p><h1>找不到這個頁面。</h1><p>文章可能已移動或刪除。</p><a className="back" href="/">← 回到文章列表</a></section>
 </Layout>));
-const xml = (text: string) => text.replace(/[<>&"']/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[ch]!);
-const feed = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>splasky — Blog</title><link>${site}/</link><description>${xml(description)}</description>${posts.map(p => `<item><title>${xml(p.title)}</title><link>${site}${postPath(p.id)}</link><guid>${site}${postPath(p.id)}</guid><pubDate>${new Date(p.date).toUTCString()}</pubDate><description>${xml(p.description)}</description></item>`).join('')}</channel></rss>`;
+const feed = buildFeed(posts, thoughts);
 await writeFile(path.join(output, 'feed.xml'), feed);
 await mkdir(path.join(output, 'splasky'), { recursive: true });
 await writeFile(path.join(output, 'splasky/feed.xml'), feed);

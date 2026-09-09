@@ -24,6 +24,10 @@ test('Thoughts is reachable from the blog and renders every source entry without
   const dates = await page.locator('.thought time').evaluateAll(elements => elements.map(el => el.getAttribute('datetime')!));
   expect(dates).toEqual([...dates].sort().reverse());
   await page.screenshot({ path: 'test-results/thoughts-mobile.png' });
+  const feedResponse = await page.request.get('/feed.xml');
+  expect(feedResponse.ok()).toBe(true);
+  const feed = await feedResponse.text();
+  expect((feed.match(/<category>Thought<\/category>/g) ?? []).length).toBe(info.thoughts);
   if (info.thoughts > 0) {
     const href = await page.locator('.thought-permalink').first().getAttribute('href');
     await page.goto('/');

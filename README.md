@@ -49,7 +49,7 @@ npm run test:browser
 npm run preview
 ```
 
-The build output is `dist/`; it includes the homepage, `/USERNAME/blog/`, article pages, `/USERNAME/thoughts/`, RSS, sitemap, robots.txt, a custom 404 and `build-info.json`. Set `CONTENT_DIR` to another checkout when testing a different source. The browser tests visit and reload every generated page at desktop and mobile widths, mock Disqus, block Vercel, verify images and links, and save screenshots under `test-results/`.
+The build output is `dist/`; it includes the homepage, `/USERNAME/blog/`, article pages, `/USERNAME/thoughts/`, one combined RSS feed at `/feed.xml` (and `/USERNAME/feed.xml`), sitemap, robots.txt, a custom 404 and `build-info.json`. The feed contains both Blog and Thought items, each labeled with a `Blog` or `Thought` category. Set `CONTENT_DIR` to another checkout when testing a different source. The browser tests visit and reload every generated page at desktop and mobile widths, mock Disqus, block Vercel, verify images and links, and save screenshots under `test-results/`.
 
 ## Disqus
 
