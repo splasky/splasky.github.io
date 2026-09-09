@@ -14,11 +14,21 @@ import rehypeSlug from 'rehype-slug';
 import rehypeStringify from 'rehype-stringify';
 import { visit } from 'unist-util-visit';
 import type { Root } from 'mdast';
+import config from '../site.config.json' with { type: 'json' };
 
-export const site = 'https://splasky.github.io';
-export const repo = 'splasky/tinymind-blog';
-export const blogPath = '/splasky/blog/';
-export const thoughtsPath = '/splasky/thoughts/';
+const origin = config.siteOrigin.replace(/\/$/, '');
+if (!/^https?:\/\/[^/]+$/.test(origin)) throw new Error('siteOrigin must be an absolute origin without a path');
+if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(config.username)) throw new Error('username contains unsupported URL characters');
+if (!/^[^/]+\/[^/]+$/.test(config.contentRepository)) throw new Error('contentRepository must be owner/repository');
+export const site = origin;
+export const username = config.username;
+export const siteName = config.siteName || username;
+export const repo = config.contentRepository;
+export const contentBranch = config.contentBranch || 'main';
+export const disqusShortname = config.disqusShortname || '';
+export const legacyOrigins = config.legacyOrigins || [];
+export const blogPath = `/${username}/blog/`;
+export const thoughtsPath = `/${username}/thoughts/`;
 export const thoughtAnchor = (id: string) => `thought-${id}`;
 export const thoughtPath = (id: string) => `${thoughtsPath}#${encodeURIComponent(thoughtAnchor(id))}`;
 export const postPath = (id: string) => `${blogPath}${encodeURIComponent(id)}/`;
@@ -80,12 +90,13 @@ export async function safeFile(source: string, relative: string): Promise<string
 
 export function rewriteLink(href: string, id: string, ids: Set<string>): string {
   const url = new URL(href, `${site}${postPath(id)}`);
-  const knownBlog = url.origin === site || isVercel(url.hostname) || ['tinymind.me', 'www.tinymind.me'].includes(url.hostname);
+  const knownBlog = url.origin === site || legacyOrigins.includes(url.origin) || isVercel(url.hostname);
   if (!knownBlog) return href;
   const decoded = decodeURIComponent(url.pathname);
-  if (/^\/splasky\/thoughts\/?$/.test(decoded)) return thoughtsPath + url.search + url.hash;
-  if (/^\/splasky\/blog\/?$/.test(decoded) || (url.origin === site && decoded === '/')) return '/' + url.search + url.hash;
-  const match = decoded.match(/^\/splasky\/blog\/([^/]+)\/?$/);
+  const prefix = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`^/${prefix}/thoughts/?$`).test(decoded)) return thoughtsPath + url.search + url.hash;
+  if (new RegExp(`^/${prefix}/blog/?$`).test(decoded) || (url.origin === site && decoded === '/')) return '/' + url.search + url.hash;
+  const match = decoded.match(new RegExp(`^/${prefix}/blog/([^/]+)/?$`));
   const markdownID = !href.startsWith('http') && href.split(/[?#]/)[0].endsWith('.md')
     ? path.posix.basename(decoded, '.md') : undefined;
   const target = match?.[1] ?? markdownID;

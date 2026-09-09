@@ -1,0 +1,9 @@
+{
+  "siteOrigin": "https://splasky.github.io",
+  "username": "splasky",
+  "siteName": "splasky",
+  "contentRepository": "splasky/tinymind-blog",
+  "contentBranch": "main",
+  "disqusShortname": "splasky",
+  "legacyOrigins": ["https://tinymind.me", "https://tinymind-alpha.vercel.app"]
+}

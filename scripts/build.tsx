@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { assetResolver, blogPath, postPath, readPosts, readThoughts, renderPost, site, repo, thoughtAnchor, thoughtPath, thoughtsPath, type Post } from './content.ts';
+import { assetResolver, blogPath, postPath, readPosts, readThoughts, renderPost, site, siteName, username, repo, contentBranch, disqusShortname, thoughtAnchor, thoughtPath, thoughtsPath, type Post } from './content.ts';
 import { validateSite } from './validate.ts';
 
 const source = path.resolve(process.env.CONTENT_DIR ?? '.content');
@@ -33,7 +33,7 @@ function Layout({ title, description, canonical, post, children, noindex = false
     <title>{title}</title><meta name="description" content={description} /><link rel="canonical" href={canonical} />
     {noindex && <meta name="robots" content="noindex" />}
     <meta property="og:title" content={title} /><meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} /><meta property="og:site_name" content="splasky" />
+    <meta property="og:url" content={canonical} /><meta property="og:site_name" content={siteName} />
     <meta property="og:type" content={post ? 'article' : 'website'} />
     <meta name="twitter:card" content={post?.image ? 'summary_large_image' : 'summary'} />
     <meta name="twitter:title" content={title} /><meta name="twitter:description" content={description} />
@@ -44,11 +44,11 @@ function Layout({ title, description, canonical, post, children, noindex = false
     <link rel="stylesheet" href="/assets/katex.min.css" />
   </head><body>
     <a className="skip-link" href="#main">跳至內容</a>
-    <header className="site-header"><a className="brand" href="/">splasky<span className="brand-dot">.</span></a>
-      <nav aria-label="主選單"><a href="/" aria-current={section === 'blog' && !post && !noindex ? 'page' : undefined}>Blog</a><a href={thoughtsPath} aria-current={section === 'thoughts' ? 'page' : undefined}>Thoughts</a><a href="/feed.xml">RSS</a><a href="https://github.com/splasky">GitHub ↗</a></nav>
+    <header className="site-header"><a className="brand" href="/">{siteName}<span className="brand-dot">.</span></a>
+      <nav aria-label="主選單"><a href="/" aria-current={section === 'blog' && !post && !noindex ? 'page' : undefined}>Blog</a><a href={thoughtsPath} aria-current={section === 'thoughts' ? 'page' : undefined}>Thoughts</a><a href="/feed.xml">RSS</a><a href={`https://github.com/${username}`}>GitHub ↗</a></nav>
     </header>
     <main id="main">{children}</main>
-    <footer className="site-footer"><span>© {new Date().getUTCFullYear()} splasky</span><a href="/feed.xml">Subscribe via RSS ↗</a></footer>
+    <footer className="site-footer"><span>© {new Date().getUTCFullYear()} {siteName}</span><a href="/feed.xml">Subscribe via RSS ↗</a></footer>
   </body></html>;
 }
 async function page(route: string, element: React.ReactElement) {
@@ -58,7 +58,7 @@ async function page(route: string, element: React.ReactElement) {
 }
 const description = 'Notes on software, hardware, and things learned along the way. 開發紀錄、技術筆記與生活隨想。';
 const years = [...new Set(posts.map(p => p.date.slice(0, 4)))];
-const listing = <Layout title="splasky — Blog" description={description} canonical={`${site}/`}>
+const listing = <Layout title={`${siteName} — Blog`} description={description} canonical={`${site}/`}>
   <section className="intro"><p className="eyebrow">NOTES & EXPLORATIONS</p><h1>Blog<span className="brand-dot">.</span></h1><p>開發紀錄、技術筆記與生活隨想。</p></section>
   <div className="archive">{posts.length ? years.map(year => <section className="year-group" key={year} aria-label={`${year} 年文章`}>
     <h2>{year}</h2><ul>{posts.filter(p => p.date.startsWith(year)).map(post => <li key={post.id}>
@@ -71,7 +71,7 @@ await page(blogPath, listing);
 const thoughtDate = new Intl.DateTimeFormat('zh-TW', {
   timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
 });
-await page(thoughtsPath, <Layout title="splasky — Thoughts" description="日常隨想、開發片段與短筆記。" canonical={`${site}${thoughtsPath}`} section="thoughts">
+await page(thoughtsPath, <Layout title={`${siteName} — Thoughts`} description="日常隨想、開發片段與短筆記。" canonical={`${site}${thoughtsPath}`} section="thoughts">
   <section className="intro"><p className="eyebrow">SMALL NOTES, EVERYDAY MOMENTS</p><h1>Thoughts<span className="brand-dot">.</span></h1><p>日常隨想、開發片段與短筆記。</p></section>
   <div className="thoughts">{thoughts.length ? thoughts.map(thought => <article className="thought" key={thought.id} id={thoughtAnchor(thought.id)}>
     <div className="prose" dangerouslySetInnerHTML={{ __html: thought.html }} />
@@ -79,16 +79,16 @@ await page(thoughtsPath, <Layout title="splasky — Thoughts" description="日�
     <footer><a className="thought-permalink" href={thoughtPath(thought.id)} aria-label={`分享 ${thoughtDate.format(new Date(thought.date))} 的短文`}><time dateTime={thought.date}>{thoughtDate.format(new Date(thought.date))}</time><span aria-hidden="true"> ↗</span></a></footer>
   </article>) : <p className="empty">尚無短文，敬請期待。</p>}</div>
 </Layout>);
-for (const post of posts) await page(postPath(post.id), <Layout title={`${post.title} — splasky`} description={post.description} canonical={`${site}${postPath(post.id)}`} post={post}>
+for (const post of posts) await page(postPath(post.id), <Layout title={`${post.title} — ${siteName}`} description={post.description} canonical={`${site}${postPath(post.id)}`} post={post}>
   <article className="post"><a className="back" href="/">← 所有文章</a><header className="post-header"><time dateTime={post.date}>{post.date.slice(0, 10)}</time><h1>{post.title}</h1></header>
     <div className="prose" dangerouslySetInnerHTML={{ __html: post.html }} />
     <section className="comments" aria-labelledby="comments-title">
       <h2 id="comments-title">留言</h2>
-      <div className="disqus-thread" id="disqus_thread" data-shortname="splasky" data-url={`${site}${postPath(post.id)}`} data-identifier={`public-splasky-${post.id}`} data-title={post.title}>
+      <div className="disqus-thread" id="disqus_thread" data-shortname={disqusShortname} data-url={`${site}${postPath(post.id)}`} data-identifier={`public-${username}-${post.id}`} data-title={post.title}>
         <p className="disqus-status">留言板載入中…</p>
         <button className="disqus-retry" type="button" hidden>重新載入留言</button>
       </div>
-      <script src="/assets/disqus.js" defer />
+      {disqusShortname && <script src="/assets/disqus.js" defer />}
     </section>
   </article>
 </Layout>);
@@ -104,6 +104,6 @@ await writeFile(path.join(output, 'sitemap.xml'), `<?xml version="1.0" encoding=
 await writeFile(path.join(output, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${site}/sitemap.xml\n`);
 await writeFile(path.join(output, '.nojekyll'), '');
 const commit = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-await writeFile(path.join(output, 'build-info.json'), JSON.stringify({ repository: repo, commit, builtAt: new Date().toISOString(), articles: posts.length, thoughts: thoughts.length }, null, 2));
+await writeFile(path.join(output, 'build-info.json'), JSON.stringify({ repository: repo, branch: contentBranch, commit, site, username, articles: posts.length, thoughts: thoughts.length, builtAt: new Date().toISOString() }, null, 2));
 await validateSite(output);
 console.log(`Validated and built ${posts.length} articles and ${thoughts.length} thoughts from ${repo}@${commit.slice(0, 12)} into dist/`);

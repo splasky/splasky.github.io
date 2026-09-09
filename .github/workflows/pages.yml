@@ -27,11 +27,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Read site configuration
+        id: config
+        run: |
+          echo "content_repo=$(node -e "console.log(JSON.parse(require('fs').readFileSync('site.config.json')).contentRepository)")" >> "$GITHUB_OUTPUT"
+          echo "content_branch=$(node -e "console.log(JSON.parse(require('fs').readFileSync('site.config.json')).contentBranch || 'main')")" >> "$GITHUB_OUTPUT"
       - name: Check out current article source
         uses: actions/checkout@v4
         with:
-          repository: splasky/tinymind-blog
+          repository: ${{ steps.config.outputs.content_repo }}
+          ref: ${{ steps.config.outputs.content_branch }}
           path: .content
+          token: ${{ secrets.CONTENT_REPO_TOKEN || github.token }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:

@@ -1,53 +1,60 @@
-# splasky Blog
+# Static TinyMind reader for GitHub Pages
 
-Static public reader for [splasky.github.io](https://splasky.github.io). TinyMind remains the editor; the reader builds directly from `splasky/tinymind-blog`, never through Vercel. Article text mentioning an old hostname is preserved.
+This project turns a TinyMind content repository into a static, domain-stable public reader. Articles and Thoughts are rendered into HTML and served by GitHub Pages, so readers do not need to visit the TinyMind/Vercel deployment. Blog article comments can continue using an existing Disqus forum.
 
-## Local development
+## Fork setup
 
-Requires Node.js 20+ (CI uses 22), npm, Git, and Python 3 for the preview server.
+1. Fork this repository and edit [`site.config.json`](site.config.json):
+
+   ```json
+   {
+     "siteOrigin": "https://YOUR-ACCOUNT.github.io",
+     "username": "YOUR-TINYMIND-USERNAME",
+     "siteName": "YOUR NAME",
+     "contentRepository": "YOUR-ACCOUNT/tinymind-blog",
+     "contentBranch": "main",
+     "disqusShortname": "YOUR-DISQUS-SHORTNAME",
+     "legacyOrigins": ["https://tinymind.me"]
+   }
+   ```
+
+   `siteOrigin` is the final public origin, without a path or trailing slash. `username` controls the `/USERNAME/blog/` and `/USERNAME/thoughts/` paths and must match the TinyMind public username. `contentRepository` is the repository created by TinyMind and must contain `content/blog/*.md` and optionally `content/thoughts.json`. Set `disqusShortname` to an empty string to disable comments. Add any old TinyMind/Vercel origins whose internal links should be rewritten to the local reader.
+
+2. In the content repository, install [`automation/notify-blog.yml`](automation/notify-blog.yml) as `.github/workflows/notify-blog.yml`. Change its `SITE_REPOSITORY` value to `YOUR-ACCOUNT/YOUR-FORK-NAME`.
+
+3. Create a fine-grained GitHub token with access to only the forked reader repository and `Contents: Read and write`. Save it as the content repository Actions secret `BLOG_PUBLISH_TOKEN`. The token is used only to send a `repository_dispatch`; it is never put into the website.
+
+4. In the fork's **Settings → Pages**, select **GitHub Actions** as the source. Run **Publish blog** once. If the content repository is private, also create a read-only token and save it in the reader repository as `CONTENT_REPO_TOKEN`.
+
+After that, pushing an article, Thought, or image change triggers a rebuild. The deployment workflow always checks out the configured repository and branch, validates the generated site, runs the browser checks, and publishes only after they pass. A failed run leaves the previous Pages deployment intact. The reader URL and generated article URLs remain stable when the TinyMind/Vercel domain changes.
+
+## Content contract
+
+Blog files use YAML frontmatter with a non-empty `title` and valid `date`; the filename is the article ID. Thoughts use an array in `content/thoughts.json` with unique string `id`, string `content`, ISO-compatible `timestamp`, and optional string `image`. Articles are sorted by date and rendered at `/<username>/blog/<id>/`; Thoughts are sorted newest first at `/<username>/thoughts/` with stable `#thought-<id>` links. Existing `public-<username>-<id>` Disqus identifiers are preserved.
+
+GitHub-hosted images in the configured content repository are copied into the site. Vercel-hosted images are downloaded during the build; an unavailable image fails publication. Other external images remain external. Markdown supports GFM, math, syntax highlighting, tables and sanitized HTML. Unsafe protocols, scripts, iframes, path traversal, invalid metadata, duplicate IDs, broken local links and unintended Vercel dependencies fail validation. Project-local `.vscode/` links in existing notes are displayed as code text.
+
+## Local build
+
+Requires Node.js 20+, npm, Git and Python 3:
 
 ```sh
 npm ci
-git clone --depth 1 https://github.com/splasky/tinymind-blog.git .content
+git clone --depth 1 https://github.com/YOUR-ACCOUNT/tinymind-blog.git .content
 npm run check
 npm test
-npm run build
+CONTENT_DIR=.content npm run build
+npx playwright install --only-shell chromium
+npm run test:browser
 npm run preview
 ```
 
-Open http://localhost:4173. To build from another checkout, use `CONTENT_DIR=/absolute/path npm run build`. Rebuild after changes; the preview serves the generated `dist/` directory.
+The build output is `dist/`; it includes the homepage, `/USERNAME/blog/`, article pages, `/USERNAME/thoughts/`, RSS, sitemap, robots.txt, a custom 404 and `build-info.json`. Set `CONTENT_DIR` to another checkout when testing a different source. The browser tests visit and reload every generated page at desktop and mobile widths, mock Disqus, block Vercel, verify images and links, and save screenshots under `test-results/`.
 
-For desktop/mobile browser checks, run `npx playwright install --only-shell chromium` then `npm run test:browser`. The test starts a local server if needed, blocks Vercel, visits and reloads every article, checks images and horizontal overflow, and saves screenshots under `test-results/`.
+## Disqus
 
-The build reads `content/blog/*.md` using YAML frontmatter (`title`, `date`) and the filename as the article ID. It produces `/`, `/splasky/blog/`, `/splasky/blog/<ID>/`, `/feed.xml`, `/splasky/feed.xml`, sitemap and 404 pages. Unicode IDs use encoded public URLs and literal filenames. Invalid metadata, missing assets, broken local links and remaining Vercel dependencies stop publication. Empty article directories are valid. Each build starts fresh, so deleted articles disappear.
+Article comments use the configured forum and the identifier `public-${username}-${articleID}`. This matches TinyMind's public article identifier, so changing the visible reader domain does not create a new thread. Disqus is loaded by the reader browser; if JavaScript or Disqus is blocked, the article remains readable and a retry button is shown. Thoughts intentionally do not have comments.
 
-GitHub-hosted images in the content repository are copied at build time. Vercel images are downloaded into local assets; unavailable images fail the build. Other external images stay external. Raw HTML in Markdown is omitted, matching the reader's Markdown-oriented content model. Scripts, iframes and unsafe URL protocols are not supported. GFM, math and syntax highlighting render during the build with local CSS and fonts.
+## Troubleshooting
 
-Project-local `.vscode/` links in existing development notes are displayed as code text because those files belong to the described project, not this blog. Other broken local links fail validation. Heading IDs are generated for article anchors.
-
-## Automatic publication
-
-`.github/workflows/pages.yml` builds and validates on website pushes, manual runs and `blog-content-updated` repository dispatches. Successful builds deploy through GitHub Pages; failed builds leave the current site intact. `build-info.json` records the exact content commit. The publication concurrency group serializes deployments and fetches the latest content when each run starts. GitHub may coalesce pending runs; every run rebuilds the current source rather than trusting an event's older SHA.
-
-For changes saved through TinyMind to trigger publication:
-
-1. Create a **fine-grained personal access token** owned by `splasky`, with access to **only `splasky.github.io`**, repository permission **Contents: Read and write**, and an appropriate expiry. Metadata read access is automatic. Do not use a broad account token.
-2. Store it as the Actions secret **`BLOG_PUBLISH_TOKEN` in `splasky/tinymind-blog`**, not in this repository or source code.
-3. Install `automation/notify-blog.yml` as `.github/workflows/notify-blog.yml` in the content repo. A content/assets push then dispatches a rebuild. It can also be run manually for verification.
-4. Set this repository's **Settings → Pages → Source** to **GitHub Actions**. Run **Publish blog** once and verify the deployed `build-info.json` and article pages.
-
-Token creation: https://github.com/settings/personal-access-tokens/new
-
-Content repo secrets: https://github.com/splasky/tinymind-blog/settings/secrets/actions
-
-Workflows run without runtime credentials in the public output. Renew the dispatch token before expiry; a missing/expired token produces a failed **Update public blog** run. The website's **Publish blog → Run workflow** remains available without that cross-repository token. Deployment typically takes minutes, not real time.
-
-## Scope and recovery
-
-The reader includes articles and Thoughts, without TinyMind login, editing or About. Blog articles include Disqus comments using the existing public `splasky` forum and stable identifiers `public-splasky-<article ID>`, so changing the visible domain keeps the same threads. Disqus is loaded in the reader browser and is unavailable when JavaScript or the forum is blocked; article reading remains available.
-
-Thoughts are read from `content/thoughts.json` (`id`, `content`, `timestamp`, optional `image`), sorted newest first, and published in full at `/splasky/thoughts/` with stable `#thought-<id>` links. Dates display in Asia/Taipei. Missing or empty Thoughts data produces an empty state; malformed JSON, invalid entries or duplicate IDs stop publication. Markdown and images use the same rendering and mirroring as articles. The content workflow watches Thoughts edits as well as articles and assets. RSS remains the article feed.
-
-TinyMind can move domains without changing this site's content source or reader URLs. This does not disable the original Vercel deployment or erase historical public URLs.
-
-If a publication fails, inspect the failed Actions step and fix the source, then rerun publication. Restore deleted content or revert the faulty site commit to publish a previous version. The original redirect is retained in Git history (`e878977`) if a complete rollback is needed.
+Inspect the failed **Publish blog** or **Update public blog** run. Common fixes are a wrong `contentRepository`, a missing `BLOG_PUBLISH_TOKEN`, an expired token, or an image URL that no longer works. Restore the source file and rerun the workflow to recover deleted content. The generated `build-info.json` records the exact source commit used by each deployment.
