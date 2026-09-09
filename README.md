@@ -44,7 +44,9 @@ Workflows run without runtime credentials in the public output. Renew the dispat
 
 ## Scope and recovery
 
-The reader includes articles and Thoughts, without TinyMind login, editing, About or comments. Thoughts are read from `content/thoughts.json` (`id`, `content`, `timestamp`, optional `image`), sorted newest first, and published in full at `/splasky/thoughts/` with stable `#thought-<id>` links. Dates display in Asia/Taipei. Missing or empty Thoughts data produces an empty state; malformed JSON, invalid entries or duplicate IDs stop publication. Markdown and images use the same rendering and mirroring as articles. The content workflow watches Thoughts edits as well as articles and assets. RSS remains the article feed.
+The reader includes articles and Thoughts, without TinyMind login, editing or About. Blog articles include Disqus comments using the existing public `splasky` forum and stable identifiers `public-splasky-<article ID>`, so changing the visible domain keeps the same threads. Disqus is loaded in the reader browser and is unavailable when JavaScript or the forum is blocked; article reading remains available.
+
+Thoughts are read from `content/thoughts.json` (`id`, `content`, `timestamp`, optional `image`), sorted newest first, and published in full at `/splasky/thoughts/` with stable `#thought-<id>` links. Dates display in Asia/Taipei. Missing or empty Thoughts data produces an empty state; malformed JSON, invalid entries or duplicate IDs stop publication. Markdown and images use the same rendering and mirroring as articles. The content workflow watches Thoughts edits as well as articles and assets. RSS remains the article feed.
 
 TinyMind can move domains without changing this site's content source or reader URLs. This does not disable the original Vercel deployment or erase historical public URLs.
 

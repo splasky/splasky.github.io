@@ -17,7 +17,11 @@ export async function validateSite(output: string): Promise<void> {
     const document = parse(html);
     const urls: string[] = [];
     function visit(node: any) {
-      if (node.tagName === 'script' || node.tagName === 'iframe') throw new Error(`Unexpected active content in ${file}`);
+      if (node.tagName === 'iframe') throw new Error(`Unexpected active content in ${file}`);
+      if (node.tagName === 'script') {
+        const src = node.attrs?.find((attr: any) => attr.name === 'src')?.value;
+        if (src !== '/assets/disqus.js') throw new Error(`Unexpected script in ${file}`);
+      }
       for (const attr of node.attrs ?? []) {
         if (['src', 'href', 'poster', 'action'].includes(attr.name)) urls.push(attr.value);
         if (attr.name.startsWith('on')) throw new Error(`Inline event handler in ${file}`);

@@ -23,6 +23,7 @@ await cp('styles/site.css', path.join(output, 'assets/site.css'));
 await cp('node_modules/katex/dist/katex.min.css', path.join(output, 'assets/katex.min.css'));
 await cp('node_modules/katex/dist/fonts', path.join(output, 'assets/fonts'), { recursive: true });
 await cp('node_modules/highlight.js/styles/github-dark.min.css', path.join(output, 'assets/highlight.css'));
+await cp('scripts/disqus.js', path.join(output, 'assets/disqus.js'));
 
 function Layout({ title, description, canonical, post, children, noindex = false, section = 'blog' }: {
   title: string; description: string; canonical: string; post?: Post; children: React.ReactNode; noindex?: boolean; section?: 'blog' | 'thoughts';
@@ -81,6 +82,14 @@ await page(thoughtsPath, <Layout title="splasky — Thoughts" description="日�
 for (const post of posts) await page(postPath(post.id), <Layout title={`${post.title} — splasky`} description={post.description} canonical={`${site}${postPath(post.id)}`} post={post}>
   <article className="post"><a className="back" href="/">← 所有文章</a><header className="post-header"><time dateTime={post.date}>{post.date.slice(0, 10)}</time><h1>{post.title}</h1></header>
     <div className="prose" dangerouslySetInnerHTML={{ __html: post.html }} />
+    <section className="comments" aria-labelledby="comments-title">
+      <h2 id="comments-title">留言</h2>
+      <div className="disqus-thread" id="disqus_thread" data-shortname="splasky" data-url={`${site}${postPath(post.id)}`} data-identifier={`public-splasky-${post.id}`} data-title={post.title}>
+        <p className="disqus-status">留言板載入中…</p>
+        <button className="disqus-retry" type="button" hidden>重新載入留言</button>
+      </div>
+      <script src="/assets/disqus.js" defer />
+    </section>
   </article>
 </Layout>);
 await writeFile(path.join(output, '404.html'), '<!DOCTYPE html>\n' + renderToStaticMarkup(<Layout title="找不到文章 — splasky" description="此頁面不存在。" canonical={`${site}/404.html`} noindex>

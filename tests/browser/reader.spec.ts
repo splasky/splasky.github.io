@@ -8,6 +8,11 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
     page.on('request', request => requests.push(request.url()));
     page.on('response', response => { if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`); });
     await page.route(/https?:\/\/[^/]*vercel[^/]*\//, route => route.abort());
+    await page.route('https://splasky.disqus.com/embed.js', route => route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: 'window.DISQUS={reset:function(){}};'
+    }));
     expect((await page.goto('/'))?.status()).toBe(200);
     await expect(page.locator('h1')).toHaveText('Blog.');
     await page.screenshot({ path: testInfo.outputPath('archive.png'), fullPage: true });
@@ -20,6 +25,10 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
       await expect(page).toHaveTitle(`${title} — splasky`);
       await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', `${title} — splasky`);
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://splasky.github.io${href}`);
+      await expect(page.locator('.disqus-thread')).toHaveAttribute('data-shortname', 'splasky');
+      await expect(page.locator('.disqus-thread')).toHaveAttribute('data-identifier', /^public-splasky-/);
+      await expect(page.locator('.disqus-thread')).toHaveAttribute('data-url', `https://splasky.github.io${href}`);
+      await expect(page.locator('.disqus-status')).toBeHidden();
       expect((await page.reload())?.status()).toBe(200);
       const layout = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth }));
       expect(layout.scroll).toBeLessThanOrEqual(layout.width);

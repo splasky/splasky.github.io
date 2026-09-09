@@ -120,6 +120,10 @@ test('output validation rejects Vercel resources and broken links but permits li
     await writeFile(file, '<a href="/missing/">Missing</a>');
     await assert.rejects(validateSite(f.output), /Broken local link/);
     await writeFile(file, '<script src="/a.js"></script>');
-    await assert.rejects(validateSite(f.output), /active content/);
+    await assert.rejects(validateSite(f.output), /Unexpected script/);
+    await mkdir(path.join(f.output, 'assets'));
+    await writeFile(path.join(f.output, 'assets/disqus.js'), '');
+    await writeFile(file, '<script src="/assets/disqus.js"></script>');
+    await validateSite(f.output);
   } finally { await f.cleanup(); }
 });
