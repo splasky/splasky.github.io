@@ -16,21 +16,23 @@ await rm(output, { recursive: true, force: true });
 await mkdir(path.join(output, 'assets'), { recursive: true });
 const asset = assetResolver(source, output);
 const ids = new Set(posts.map(p => p.id));
-for (const post of posts) await renderPost(post, ids, asset);
+for (const post of posts) await renderPost(post, ids, asset, true);
 for (const thought of thoughts) {
-  await renderPost(thought, ids, asset);
+  await renderPost(thought, ids, asset, true);
   if (thought.attachment) thought.attachment = await asset(thought.attachment, thought.id);
 }
-if (about) await renderPost(about, ids, asset);
+if (about) await renderPost(about, ids, asset, false);
 await cp('styles/site.css', path.join(output, 'assets/site.css'));
 await cp('node_modules/katex/dist/katex.min.css', path.join(output, 'assets/katex.min.css'));
 await cp('node_modules/katex/dist/fonts', path.join(output, 'assets/fonts'), { recursive: true });
 await cp('node_modules/highlight.js/styles/github-dark.min.css', path.join(output, 'assets/highlight.css'));
 await cp('scripts/disqus.js', path.join(output, 'assets/disqus.js'));
+if ([...posts, ...thoughts].some(post => post.hasVideoEmbeds)) await cp('scripts/video-embed.js', path.join(output, 'assets/video-embed.js'));
 
 function Layout({ title, description, canonical, post, children, noindex = false, section = 'blog' }: {
   title: string; description: string; canonical: string; post?: Post; children: React.ReactNode; noindex?: boolean; section?: 'blog' | 'thoughts' | 'about';
 }) {
+  const videoEmbeds = post?.hasVideoEmbeds || (!post && section === 'thoughts' && thoughts.some(thought => thought.hasVideoEmbeds));
   return <html lang="zh-Hant"><head>
     <meta charSet="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title><meta name="description" content={description} /><link rel="canonical" href={canonical} />
@@ -45,6 +47,7 @@ function Layout({ title, description, canonical, post, children, noindex = false
     <link rel="alternate" type="application/rss+xml" title="splasky — Blog" href="/feed.xml" />
     <link rel="stylesheet" href="/assets/site.css" /><link rel="stylesheet" href="/assets/highlight.css" />
     <link rel="stylesheet" href="/assets/katex.min.css" />
+    {videoEmbeds && <script src="/assets/video-embed.js" defer />}
   </head><body>
     <a className="skip-link" href="#main">跳至內容</a>
     <header className="site-header"><a className="brand" href="/">{siteName}<span className="brand-dot">.</span></a>

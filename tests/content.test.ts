@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm, readFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { aboutPath, assetResolver, postPath, readAbout, readPosts, readThoughts, renderPost, rewriteLink, safeFile, thoughtPath, type Post } from '../scripts/content.ts';
+import { aboutPath, assetResolver, parseVideoUrl, postPath, readAbout, readPosts, readThoughts, renderPost, rewriteLink, safeFile, thoughtPath, type Post } from '../scripts/content.ts';
 import { validateSite } from '../scripts/validate.ts';
 import { buildFeed } from '../scripts/feed.ts';
 
@@ -97,6 +97,45 @@ test('mirrors repo images and renders math, code, tables and reference images wi
     assert.match(post.html, /https:\/\/tinymind-alpha.vercel.app/); // Preserve literal code examples.
     assert.equal(await readFile(path.join(f.output, post.image!), 'utf8'), 'image-fixture');
     await assert.rejects(assetResolver(f.source, f.output)('/assets/missing.png', 'a'), /ENOENT/);
+  } finally { await f.cleanup(); }
+});
+
+test('parses supported video URLs and only renders standalone embeds when enabled', async () => {
+  const cid = 'bafybeigdyrztabcdefghijklmnopqrstuvwx';
+  assert.equal(parseVideoUrl('https://youtu.be/dQw4w9WgXcQ')?.embedUrl, 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
+  assert.equal(parseVideoUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ')?.kind, 'youtube');
+  assert.equal(parseVideoUrl('https://drive.google.com/file/d/abc_123456/view')?.embedUrl, 'https://drive.google.com/file/d/abc_123456/preview');
+  assert.equal(parseVideoUrl(`ipfs://${cid}/video.mp4`)?.embedUrl, `https://ipfs.io/ipfs/${cid}/video.mp4`);
+  assert.equal(parseVideoUrl(`https://evil.example/ipfs/${cid}/video.mp4`), null);
+  assert.equal(parseVideoUrl('https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ'), null);
+  const f = await fixture();
+  try {
+    const post: Post = { id: 'video', title: 'Video', date: '2026-01-01T00:00:00Z', html: '', description: '', markdown: `
+[video embedded test](https://youtu.be/dQw4w9WgXcQ?si=test)
+
+[Drive video](https://drive.google.com/file/d/abc_123456/view)
+
+[IPFS video](ipfs://${cid}/video.mp4)
+
+Watch [this video](https://youtu.be/dQw4w9WgXcQ)
+
+<iframe src="https://evil.example"></iframe>` };
+    await renderPost(post, new Set(['video']), assetResolver(f.source, f.output), true);
+    assert.match(post.html, /class="video-embed"/);
+    assert.doesNotMatch(post.html, /video-embed-label|video-embed-original|在原始來源開啟/);
+    assert.match(post.html, /data-video-kind="youtube"/);
+    assert.match(post.html, /data-video-kind="gdrive"/);
+    assert.match(post.html, /data-video-kind="ipfs"/);
+    assert.match(post.html, /aria-label="載入 YouTube 影片"/);
+    assert.match(post.html, /aria-label="載入 Google Drive 影片"/);
+    assert.match(post.html, /aria-label="載入 IPFS 影片"/);
+    assert.match(post.html, /Watch <a href="https:\/\/youtu\.be\/dQw4w9WgXcQ">this video<\/a>/);
+    assert.doesNotMatch(post.html, /<iframe/);
+    assert.equal(post.hasVideoEmbeds, true);
+    const about = { ...post, markdown: 'https://youtu.be/dQw4w9WgXcQ', html: '' };
+    await renderPost(about, new Set(['video']), assetResolver(f.source, f.output), false);
+    assert.doesNotMatch(about.html, /video-embed/);
+    assert.equal(about.hasVideoEmbeds, false);
   } finally { await f.cleanup(); }
 });
 

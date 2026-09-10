@@ -1,7 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { parse } from 'parse5';
-import { isVercel, site } from './content.ts';
+import { isVercel, parseVideoUrl, site } from './content.ts';
 
 export async function validateSite(output: string): Promise<void> {
   const files: string[] = [];
@@ -20,7 +20,23 @@ export async function validateSite(output: string): Promise<void> {
       if (node.tagName === 'iframe') throw new Error(`Unexpected active content in ${file}`);
       if (node.tagName === 'script') {
         const src = node.attrs?.find((attr: any) => attr.name === 'src')?.value;
-        if (src !== '/assets/disqus.js') throw new Error(`Unexpected script in ${file}`);
+        if (src !== '/assets/disqus.js' && src !== '/assets/video-embed.js') throw new Error(`Unexpected script in ${file}`);
+      }
+      if (node.tagName === 'div' && node.attrs?.some((attr: any) => attr.name === 'data-video-kind')) {
+        const attrs = Object.fromEntries(node.attrs.map((a: any) => [a.name, a.value]));
+        if (attrs.class !== 'video-embed') throw new Error(`Invalid video embed class in ${file}`);
+        const video = parseVideoUrl(attrs['data-original-url'] ?? '');
+        if (!video || video.kind !== attrs['data-video-kind'] || video.embedUrl !== attrs['data-embed-url']) {
+          throw new Error(`Invalid video embed in ${file}`);
+        }
+        const loader = node.childNodes?.find((child: any) => child.tagName === 'button');
+        const childAttrs = (child: any) => Object.fromEntries((child?.attrs ?? []).map((a: any) => [a.name, a.value]));
+        const source = video.kind === 'youtube' ? 'YouTube' : video.kind === 'gdrive' ? 'Google Drive' : 'IPFS';
+        if (!loader || childAttrs(loader).class !== 'video-embed-load' || childAttrs(loader).type !== 'button'
+          || childAttrs(loader)['aria-label'] !== `載入 ${source} 影片`) {
+          throw new Error(`Video embed missing loader in ${file}`);
+        }
+        if (node.childNodes?.some((child: any) => child.tagName === 'p' || child.tagName === 'a')) throw new Error(`Unexpected video embed control in ${file}`);
       }
       for (const attr of node.attrs ?? []) {
         if (['src', 'href', 'poster', 'action'].includes(attr.name)) urls.push(attr.value);

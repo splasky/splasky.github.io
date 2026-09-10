@@ -6,7 +6,7 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import remarkRehype from 'remark-rehype';
+import remarkRehype, { type Options as RemarkRehypeOptions } from 'remark-rehype';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
@@ -34,8 +34,67 @@ export const thoughtAnchor = (id: string) => `thought-${id}`;
 export const thoughtPath = (id: string) => `${thoughtsPath}#${encodeURIComponent(thoughtAnchor(id))}`;
 export const postPath = (id: string) => `${blogPath}${encodeURIComponent(id)}/`;
 export const isVercel = (host: string) => /(^|\.)(vercel\.app|vercel\.com|vercel-scripts\.com|vercel-insights\.com|vercel-analytics\.com)$/.test(host);
-export type Post = { id: string; title: string; date: string; markdown: string; html: string; description: string; image?: string };
+export type VideoEmbed = { kind: 'youtube' | 'gdrive' | 'ipfs'; originalUrl: string; embedUrl: string };
+export type Post = { id: string; title: string; date: string; markdown: string; html: string; description: string; image?: string; hasVideoEmbeds?: boolean };
 export type Thought = Post & { attachment?: string };
+
+const youtubeHosts = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be']);
+const driveHosts = new Set(['drive.google.com', 'www.drive.google.com']);
+const ipfsGatewayHosts = new Set(['ipfs.io', 'dweb.link', 'w3s.link', 'nftstorage.link', 'cloudflare-ipfs.com']);
+
+export function parseVideoUrl(value: string): VideoEmbed | null {
+  const originalUrl = value.trim();
+  if (!originalUrl || /[\s<>"']/u.test(originalUrl)) return null;
+  if (originalUrl.toLowerCase().startsWith('ipfs://')) {
+    const path = originalUrl.slice(7).replace(/^\/+/, '');
+    const match = path.match(/^((?:Qm[A-HJ-NP-Za-km-z1-9]{44})|(?:bafy|bafk)[a-z2-7]{20,})(?:\/(.*))?$/u);
+    if (!match) return null;
+    const suffix = match[2] ? `/${match[2].split('/').map(encodeURIComponent).join('/')}` : '';
+    return { kind: 'ipfs', originalUrl, embedUrl: `https://ipfs.io/ipfs/${match[1]}${suffix}` };
+  }
+  let url: URL;
+  try { url = new URL(originalUrl); } catch { return null; }
+  if (url.protocol !== 'https:') return null;
+  const host = url.hostname.toLowerCase();
+  if (youtubeHosts.has(host)) {
+    let id = '';
+    if (host.includes('youtu.be')) id = url.pathname.slice(1).split('/')[0];
+    else if (url.pathname === '/watch') id = url.searchParams.get('v') ?? '';
+    else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] ?? '';
+    if (!/^[A-Za-z0-9_-]{11}$/u.test(id)) return null;
+    return { kind: 'youtube', originalUrl, embedUrl: `https://www.youtube-nocookie.com/embed/${id}` };
+  }
+  if (driveHosts.has(host)) {
+    const match = url.pathname.match(/^\/file\/d\/([A-Za-z0-9_-]{10,})\/(?:view|preview)?$/u);
+    if (!match) return null;
+    return { kind: 'gdrive', originalUrl, embedUrl: `https://drive.google.com/file/d/${match[1]}/preview` };
+  }
+  if (ipfsGatewayHosts.has(host)) {
+    const match = url.pathname.match(/^\/ipfs\/((?:Qm[A-HJ-NP-Za-km-z1-9]{44})|(?:bafy|bafk)[a-z2-7]{20,})(?:\/[^\s]*)?$/u);
+    if (!match) return null;
+    return { kind: 'ipfs', originalUrl, embedUrl: url.href };
+  }
+  return null;
+}
+
+function standaloneVideo(node: any): VideoEmbed | null {
+  if (node.type === 'paragraph' && node.children?.length === 1) {
+    const child = node.children[0];
+    if (child.type === 'text') return parseVideoUrl(child.value);
+    if (child.type === 'link') return parseVideoUrl(child.url);
+  }
+  return null;
+}
+
+function remarkVideoEmbeds(enabled: boolean) {
+  return () => (tree: any) => {
+    if (enabled) visit(tree, 'paragraph', (node: any, index: number | undefined, parent: any) => {
+      if (!parent || index === undefined) return;
+      const video = standaloneVideo(node);
+      if (video) parent.children[index] = { type: 'videoEmbed', data: video };
+    });
+  };
+}
 
 export async function readAbout(source: string): Promise<Post | null> {
   try {
@@ -170,9 +229,10 @@ export function assetResolver(source: string, output: string) {
   };
 }
 
-export async function renderPost(post: Post, ids: Set<string>, asset: ReturnType<typeof assetResolver>): Promise<void> {
-  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+export async function renderPost(post: Post, ids: Set<string>, asset: ReturnType<typeof assetResolver>, enableVideoEmbeds = false): Promise<void> {
+  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkVideoEmbeds(enableVideoEmbeds));
   const tree = processor.parse(post.markdown) as Root;
+  await processor.run(tree);
   const definitions = new Map<string, string>();
   visit(tree, 'definition', node => { definitions.set(node.identifier, node.url); });
   // Expand references so a single definition can safely serve both a link and an image.
@@ -201,9 +261,32 @@ export async function renderPost(post: Post, ids: Set<string>, asset: ReturnType
   await Promise.all(jobs);
   visit(tree, 'image', node => { post.image ??= node.url; });
   post.description = text.join(' ').replace(/\s+/g, ' ').trim().slice(0, 160) || post.title;
-  const renderer = unified().use(remarkRehype).use(rehypeSanitize, {
+  post.hasVideoEmbeds = enableVideoEmbeds && Boolean((tree as any).children.some((node: any) => node.type === 'videoEmbed'));
+  type RemarkHandler = Exclude<NonNullable<RemarkRehypeOptions['handlers']>[keyof NonNullable<RemarkRehypeOptions['handlers']>], undefined>;
+  const videoEmbedHandler = ((_state: Parameters<RemarkHandler>[0], node: any): ReturnType<RemarkHandler> => {
+    const video = node.data as VideoEmbed;
+    const source = video.kind === 'youtube' ? 'YouTube' : video.kind === 'gdrive' ? 'Google Drive' : 'IPFS';
+    return {
+      type: 'element', tagName: 'div', properties: {
+        className: ['video-embed'], 'data-video-kind': video.kind,
+        'data-embed-url': video.embedUrl, 'data-original-url': video.originalUrl,
+      }, children: [
+        { type: 'element', tagName: 'button', properties: { className: ['video-embed-load'], type: 'button', ariaLabel: `載入 ${source} 影片` }, children: [] },
+      ],
+    };
+  });
+  const renderer = unified().use(remarkRehype, {
+    handlers: { videoEmbed: videoEmbedHandler } as RemarkRehypeOptions['handlers'],
+  }).use(rehypeSanitize, {
     ...defaultSchema,
-    attributes: { ...defaultSchema.attributes, code: [...(defaultSchema.attributes?.code ?? []), ['className', /^language-./, 'math-inline', 'math-display']] },
+    tagNames: [...(defaultSchema.tagNames ?? []), 'button'],
+    attributes: {
+      ...defaultSchema.attributes,
+      div: [...(defaultSchema.attributes?.div ?? []), ['className', 'video-embed'], 'data-video-kind', 'data-embed-url', 'data-original-url'],
+      button: ['className', 'type', 'ariaLabel'],
+      p: [...(defaultSchema.attributes?.p ?? []), 'className'],
+      code: [...(defaultSchema.attributes?.code ?? []), ['className', /^language-./, 'math-inline', 'math-display']],
+    },
   }).use(rehypeSlug).use(rehypeKatex).use(rehypeHighlight).use(rehypeStringify);
   post.html = renderer.stringify(await renderer.run(tree));
 }
